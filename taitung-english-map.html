@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>臺東縣英語店家地圖</title>
+<style>
+#app * { box-sizing: border-box; }
+
+#app {
+  display: flex;
+  height: 680px;
+  font-family: 'Noto Sans TC', 'Microsoft JhengHei', Arial, sans-serif;
+  background: #e8f4fd;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── 左側地圖面板 ── */
+#map-panel {
+  width: 44%;
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f0f8ff;
+  border-right: 2px solid #b3d4e8;
+  padding: 14px 10px 8px;
+  transition: width 0.4s ease, opacity 0.4s ease;
+  overflow: hidden;
+}
+
+#map-panel.hidden {
+  width: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#map-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0d47a1;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+#map-hint {
+  font-size: 0.75rem;
+  color: #90a4ae;
+  margin: 3px 0 8px;
+  text-align: center;
+}
+
+#taitung-map {
+  width: auto;
+  height: calc(100% - 82px);
+  max-width: 100%;
+  cursor: pointer;
+}
+
+/* SVG 鄉鎮區塊 */
+.township polygon,
+.township path,
+.township ellipse {
+  fill: #78b4d8;
+  stroke: #e8f4fd;
+  stroke-width: 1.5;
+  transition: fill 0.18s, filter 0.18s;
+}
+
+.township text {
+  font-size: 8px;
+  fill: #0d2f55;
+  pointer-events: none;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.township:hover polygon,
+.township:hover path,
+.township:hover ellipse {
+  fill: #1e88e5;
+  filter: drop-shadow(0 0 6px rgba(30,136,229,0.7));
+}
+
+.township.active polygon,
+.township.active path,
+.township.active ellipse {
+  fill: #1565c0;
+  filter: drop-shadow(0 0 4px rgba(21,101,192,0.6));
+}
+
+.township:hover text,
+.township.active text {
+  fill: #fff;
+}
+
+/* ── 右側面板 ── */
+#right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* 歡迎畫面 */
+#welcome-msg {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 30px;
+  text-align: center;
+}
+
+#welcome-msg h2 {
+  font-size: 1.6rem;
+  color: #0d47a1;
+  margin-bottom: 12px;
+}
+
+#welcome-msg p {
+  font-size: 1rem;
+  color: #546e7a;
+  line-height: 1.8;
+}
+
+#welcome-msg .stats {
+  margin-top: 24px;
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+}
+
+#welcome-msg .stat-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px 22px;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  border-top: 3px solid #1976d2;
+}
+
+#welcome-msg .stat-num {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1565c0;
+}
+
+#welcome-msg .stat-label {
+  font-size: 0.78rem;
+  color: #78909c;
+  margin-top: 2px;
+}
+
+/* 鄉鎮標題列 */
+#township-header {
+  display: none;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  background: #1565c0;
+  color: white;
+  flex-shrink: 0;
+}
+
+#township-header.visible { display: flex; }
+
+#btn-back-map {
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: white;
+  padding: 5px 13px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+#btn-back-map:hover { background: rgba(255,255,255,0.32); }
+
+#township-name-title { font-size: 1.15rem; font-weight: 700; }
+#township-store-count { font-size: 0.8rem; opacity: 0.8; margin-top: 1px; }
+
+/* 店家列表 */
+#store-list {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  gap: 8px;
+  background: #e8f4fd;
+}
+
+#store-list.visible { display: flex; }
+
+.store-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  border-radius: 10px;
+  padding: 12px 15px;
+  cursor: pointer;
+  border-left: 4px solid #78b4d8;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  transition: all 0.18s;
+}
+
+.store-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 16px rgba(21,101,192,0.15);
+  border-left-color: #1565c0;
+}
+
+.store-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e3f2fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.store-card-info { flex: 1; min-width: 0; }
+.store-card-name { font-size: 0.95rem; font-weight: 600; color: #1a237e; }
+.store-type-tag {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 8px;
+  background: #e3f2fd;
+  color: #1565c0;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.store-card-arrow { color: #90caf9; font-size: 1.3rem; flex-shrink: 0; }
+
+/* ── 店家詳細資訊 ── */
+#store-detail {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+#store-detail.visible { display: flex; }
+
+#detail-header {
+  padding: 20px 22px 18px;
+  background: linear-gradient(135deg, #0d47a1, #1976d2);
+  color: white;
+  flex-shrink: 0;
+}
+
+#btn-back-list {
+  display: inline-block;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: white;
+  padding: 5px 13px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  margin-bottom: 12px;
+  transition: background 0.2s;
+}
+#btn-back-list:hover { background: rgba(255,255,255,0.32); }
+
+#detail-emoji { font-size: 2rem; margin-bottom: 5px; }
+#detail-name { font-size: 1.45rem; font-weight: 700; margin-bottom: 4px; }
+#detail-loc { font-size: 0.85rem; opacity: 0.85; }
+
+#detail-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  flex: 1;
+  background: #f5fbff;
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid #e3f2fd;
+}
+
+.info-row:last-child { border-bottom: none; }
+
+.info-label {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: #90a4ae;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding-top: 2px;
+}
+
+.info-value { font-size: 0.93rem; color: #263238; flex: 1; }
+.info-value.dim { color: #b0bec5; font-style: italic; }
+
+.english-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #1565c0;
+  color: white;
+  padding: 5px 13px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+#store-list::-webkit-scrollbar,
+#detail-body::-webkit-scrollbar { width: 5px; }
+#store-list::-webkit-scrollbar-thumb,
+#detail-body::-webkit-scrollbar-thumb { background: #90caf9; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ 左側地圖 ══ -->
+  <div id="map-panel">
+    <div id="map-title">臺東縣英語店家地圖</div>
+    <div id="map-hint">滑鼠移至鄉鎮 → 點擊查看店家</div>
+
+    <!-- 台東縣地圖：以真實比例重繪
+         西界：中央山脈（西邊鋸齒狀）
+         東界：太平洋海岸線（東邊略帶弧度）
+         北：接花蓮縣；南：接屏東縣
+         花東縱谷從北偏西往南偏東斜貫
+    -->
+    <svg id="taitung-map" viewBox="0 0 330 600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="sea-grad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#b8ddf5" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="#90c8e8" stop-opacity="0.8"/>
+        </linearGradient>
+        <linearGradient id="mountain-grad" x1="1" y1="0" x2="0" y2="0">
+          <stop offset="0%" stop-color="#cde0ef" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="#a0c4d8" stop-opacity="0.5"/>
+        </linearGradient>
+      </defs>
+
+      <!-- 海洋底色 -->
+      <rect x="0" y="0" width="330" height="600" fill="#b8dcf2"/>
+      <!-- 陸地底色 -->
+      <polygon points="5,58 30,38 155,5 265,5 288,62 282,138 258,168 220,178 200,198 238,220 268,240 298,282 312,320 306,365 282,385 252,375 230,330 245,290 212,268 168,248 145,210 118,222 78,212 50,185 45,168 50,130 92,142 140,132 160,95 168,48 155,5"
+            fill="#d6ebf5" stroke="none"/>
+      <!-- 繼續陸地底色南部 -->
+      <polygon points="5,58 5,330 5,420 5,488 22,458 60,478 98,488 125,472 130,440 85,428 40,398 18,350 28,310 45,265 50,185 50,238 65,278 90,315 122,342 155,360 143,385 155,412 128,438 85,425 40,398"
+            fill="#d6ebf5" stroke="none"/>
+
+      <!-- ══ 各鄉鎮多邊形（依真實地理位置重繪） ══ -->
+
+      <!-- ①  池上鄉：花東縱谷北部，面積大，形狀略呈菱形 -->
+      <g class="township" id="tw-chishang" onclick="selectTownship('池上鄉')">
+        <polygon points="30,38 155,5 168,48 160,95 140,132 92,142 50,130 45,92 28,68"/>
+        <text x="100" y="68">池上鄉</text>
+      </g>
+
+      <!-- ②  長濱鄉：縣境最北，臨太平洋，東北角最寬 -->
+      <g class="township" id="tw-changbin" onclick="selectTownship('長濱鄉')">
+        <polygon points="155,5 265,5 288,62 282,138 258,168 220,178 200,158 188,128 168,95 160,95 168,48"/>
+        <text x="224" y="82">長濱鄉</text>
+      </g>
+
+      <!-- ③  延平鄉：中央山脈山區，細長南北走向 -->
+      <g class="township" id="tw-yanping" onclick="selectTownship('延平鄉')">
+        <polygon points="5,58 28,38 30,38 28,68 45,92 50,130 45,168 42,215 30,265 12,302 5,288 5,58"/>
+        <text x="24" y="185">延<tspan x="24" dy="10">平</tspan><tspan x="24" dy="10">鄉</tspan></text>
+      </g>
+
+      <!-- ④  鹿野鄉：縱谷中部，臺九線沿線小鄉 -->
+      <g class="township" id="tw-luye" onclick="selectTownship('鹿野鄉')">
+        <polygon points="50,130 92,142 140,132 148,168 145,208 118,222 78,212 50,185 45,168"/>
+        <text x="95" y="172">鹿野鄉</text>
+      </g>
+
+      <!-- ⑤  成功鎮：東海岸中北段，三仙台所在 -->
+      <g class="township" id="tw-chenggong" onclick="selectTownship('成功鎮')">
+        <polygon points="200,158 220,178 258,168 282,138 296,178 290,228 262,235 232,218 202,195"/>
+        <text x="248" y="192">成功鎮</text>
+      </g>
+
+      <!-- ⑥  東河鄉：東海岸中段，都蘭山區，面積廣 -->
+      <g class="township" id="tw-donghe" onclick="selectTownship('東河鄉')">
+        <polygon points="145,168 148,168 140,132 168,95 188,128 200,158 202,195 232,218 262,235 290,228 302,285 275,295 245,288 210,268 168,248 145,210"/>
+        <text x="242" y="255">東河鄉</text>
+      </g>
+
+      <!-- ⑦  卑南鄉：面積最大，三面環抱臺東市 -->
+      <g class="township" id="tw-beinan" onclick="selectTownship('卑南鄉')">
+        <polygon points="50,185 78,212 118,222 145,208 168,248 210,268 245,288 230,328 218,362 188,372 155,362 122,342 90,315 65,278 50,238"/>
+        <text x="142" y="285">卑南鄉</text>
+      </g>
+
+      <!-- ⑧  臺東市：東南海岸核心城市 -->
+      <g class="township" id="tw-taitung" onclick="selectTownship('臺東市')">
+        <polygon points="210,268 275,295 302,285 315,322 308,368 285,388 248,378 230,328 245,288"/>
+        <text x="272" y="328">臺東市</text>
+      </g>
+
+      <!-- ⑨  金峰鄉：南部山地鄉 -->
+      <g class="township" id="tw-jinfeng" onclick="selectTownship('金峰鄉')">
+        <polygon points="30,265 65,278 90,315 122,342 155,362 143,385 158,412 130,438 85,425 40,398 18,350"/>
+        <text x="88" y="360">金峰鄉</text>
+      </g>
+
+      <!-- ⑩  太麻里鄉：南段海岸，金崙溪流域 -->
+      <g class="township" id="tw-taimali" onclick="selectTownship('太麻里鄉')">
+        <polygon points="155,362 188,372 248,378 285,388 298,422 272,452 232,452 192,435 152,405 143,385"/>
+        <text x="222" y="408">太麻里鄉</text>
+      </g>
+
+      <!-- ⑪  達仁鄉：縣境西南山地，部落聚落 -->
+      <g class="township" id="tw-daren" onclick="selectTownship('達仁鄉')">
+        <polygon points="18,350 40,398 85,425 130,438 125,470 98,488 60,478 22,458 5,418 5,360"/>
+        <text x="62" y="440">達仁鄉</text>
+      </g>
+
+      <!-- ⑫  大武鄉：縣境最南海岸，南迴公路 -->
+      <g class="township" id="tw-dawu" onclick="selectTownship('大武鄉')">
+        <polygon points="125,470 192,435 232,452 272,452 292,482 262,505 215,508 170,492 138,475"/>
+        <text x="215" y="478">大武鄉</text>
+      </g>
+
+      <!-- ══ 離島 ══ -->
+
+      <!-- 綠島鄉 -->
+      <g class="township" id="tw-lyudao" onclick="selectTownship('綠島鄉')">
+        <ellipse cx="318" cy="278" rx="19" ry="27"/>
+        <text x="318" y="318">綠島鄉</text>
+      </g>
+
+      <!-- 蘭嶼鄉 -->
+      <g class="township" id="tw-lanyu" onclick="selectTownship('蘭嶼鄉')">
+        <ellipse cx="318" cy="472" rx="19" ry="15"/>
+        <text x="318" y="500">蘭嶼鄉</text>
+      </g>
+
+      <!-- 花東縱谷示意線（淡淡的地理輔助線） -->
+      <line x1="30" y1="38" x2="148" y2="528" stroke="#a8c8e0" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.5"/>
+
+      <!-- 太平洋文字 -->
+      <text x="318" y="165" font-size="9" fill="#5a9ec0" text-anchor="middle" opacity="0.9">太</text>
+      <text x="318" y="177" font-size="9" fill="#5a9ec0" text-anchor="middle" opacity="0.9">平</text>
+      <text x="318" y="189" font-size="9" fill="#5a9ec0" text-anchor="middle" opacity="0.9">洋</text>
+
+      <!-- 離島虛線連接 -->
+      <line x1="302" y1="295" x2="299" y2="278" stroke="#6aabcc" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="290" y1="448" x2="299" y2="466" stroke="#6aabcc" stroke-width="1" stroke-dasharray="3,3"/>
+
+      <!-- 指北針 -->
+      <g transform="translate(20,22)">
+        <circle cx="0" cy="0" r="11" fill="white" opacity="0.85" stroke="#90c0dc" stroke-width="0.8"/>
+        <polygon points="0,-9 -3,3 0,1 3,3" fill="#1565c0"/>
+        <polygon points="0,9 -3,-3 0,-1 3,-3" fill="#90a4ae"/>
+        <text x="0" y="-14" font-size="8" fill="#1565c0" text-anchor="middle" font-weight="700">N</text>
+      </g>
+
+      <!-- 比例尺 -->
+      <g transform="translate(12,578)">
+        <line x1="0" y1="0" x2="40" y2="0" stroke="#5a9ec0" stroke-width="1.5"/>
+        <line x1="0" y1="-3" x2="0" y2="3" stroke="#5a9ec0" stroke-width="1.5"/>
+        <line x1="40" y1="-3" x2="40" y2="3" stroke="#5a9ec0" stroke-width="1.5"/>
+        <text x="20" y="-5" font-size="7" fill="#5a9ec0" text-anchor="middle">約 20km</text>
+      </g>
+    </svg>
+  </div>
+
+  <!-- ══ 右側面板 ══ -->
+  <div id="right-panel">
+
+    <!-- 歡迎畫面 -->
+    <div id="welcome-msg">
+      <h2>臺東縣英語店家地圖</h2>
+      <p>點擊左側地圖的各鄉鎮<br>查看當地英語友善店家</p>
+      <div class="stats">
+        <div class="stat-box">
+          <div class="stat-num">62</div>
+          <div class="stat-label">英語友善店家</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">14</div>
+          <div class="stat-label">鄉鎮市</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 鄉鎮店家列表 -->
+    <div id="township-header">
+      <button id="btn-back-map" onclick="backToMap()">← 返回地圖</button>
+      <div>
+        <div id="township-name-title"></div>
+        <div id="township-store-count"></div>
+      </div>
+    </div>
+    <div id="store-list"></div>
+
+    <!-- 店家詳細資訊 -->
+    <div id="store-detail">
+      <div id="detail-header">
+        <div id="btn-back-list" onclick="backToList()">← 返回店家列表</div>
+        <div id="detail-emoji"></div>
+        <div id="detail-name"></div>
+        <div id="detail-loc"></div>
+      </div>
+      <div id="detail-body"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const storeData = {
+  '臺東市': { stores: [
+    { name:'東眠民宿',           type:'民宿',   icon:'🏠', eng:'英語服務' },
+    { name:'愛上台東藍民宿',      type:'民宿',   icon:'🏠', eng:'英語服務' },
+    { name:'台東快樂海民宿',      type:'民宿',   icon:'🏠', eng:'英語服務' },
+    { name:'邦查烘焙坊',          type:'烘焙',   icon:'🥐', eng:'基礎英語' },
+    { name:'拿手菜餐坊',          type:'餐廳',   icon:'🍽️', eng:'英語菜單' },
+    { name:'渴望餐飲',            type:'餐廳',   icon:'🍽️', eng:'英語菜單' },
+    { name:'木可蘿蔔糕',          type:'小吃',   icon:'🥘', eng:'基礎英語' },
+    { name:'布魯蛋餅坊',          type:'早餐',   icon:'🍳', eng:'基礎英語' },
+    { name:'早點來',              type:'早餐',   icon:'🍳', eng:'基礎英語' },
+    { name:'東傑茶行',            type:'茶飲',   icon:'🍵', eng:'英語服務' },
+    { name:'山海關名產店',        type:'伴手禮', icon:'🎁', eng:'英語服務' },
+    { name:'臺東帆布行',          type:'文創',   icon:'🎨', eng:'基礎英語' },
+    { name:'石山部落',            type:'部落體驗',icon:'🏕️',eng:'英語導覽' },
+    { name:'森森咖啡館',          type:'咖啡',   icon:'☕', eng:'英語菜單' },
+    { name:'薩哩咖咖餐飲有限公司', type:'餐廳',  icon:'🍽️', eng:'英語服務' },
+    { name:'野菜皇后',            type:'蔬食',   icon:'🥗', eng:'基礎英語' },
+    { name:'鄰家蒸餃小館',        type:'餐廳',   icon:'🥟', eng:'基礎英語' },
+    { name:'向日葵藍染文創',      type:'文創',   icon:'🎨', eng:'英語導覽' },
+    { name:'心燈窯坊',            type:'陶藝',   icon:'🏺', eng:'英語導覽' },
+    { name:'好漁日鬼頭刀專屬料理', type:'海鮮',  icon:'🐟', eng:'英語菜單' },
+    { name:'金桔啦檸檬鮮飲',      type:'飲料',   icon:'🍋', eng:'基礎英語' },
+    { name:'台東有知鳥',          type:'文創',   icon:'🦜', eng:'英語服務' },
+    { name:'火車頭釋迦',          type:'農產',   icon:'🌿', eng:'基礎英語' },
+    { name:'台東星棧101民宿',     type:'民宿',   icon:'🏠', eng:'英語服務' },
+  ]},
+  '池上鄉': { stores: [
+    { name:'連記茗茶',        type:'茶葉',   icon:'🍵', eng:'基礎英語' },
+    { name:'池上鄉福德宮',    type:'文化景點',icon:'⛩️',eng:'英語介紹' },
+    { name:'大池豆皮店',      type:'小吃',   icon:'🥘', eng:'基礎英語' },
+    { name:'芭洋美饌館',      type:'餐廳',   icon:'🍽️', eng:'英語菜單' },
+    { name:'曬穀場話桑麻工坊',type:'體驗工坊',icon:'🌾',eng:'英語導覽' },
+    { name:'巧本味蔬食人文料理',type:'蔬食',  icon:'🥗', eng:'英語菜單' },
+    { name:'池上樂蜂場',      type:'農業體驗',icon:'🐝', eng:'英語導覽' },
+  ]},
+  '東河鄉': { stores: [
+    { name:'農夫很忙工作坊',        type:'農業體驗', icon:'🌱', eng:'英語導覽' },
+    { name:'都蘭國',                type:'藝術空間', icon:'🎨', eng:'英語服務' },
+    { name:'都蘭小吃店臼部廚房',    type:'小吃',    icon:'🥘', eng:'基礎英語' },
+    { name:'達卡兒陶甕烘焙咖啡館',  type:'咖啡烘焙', icon:'☕', eng:'英語菜單' },
+  ]},
+  '卑南鄉': { stores: [
+    { name:'奉禮食品有限公司（梨迦出走）',type:'食品',    icon:'🍱', eng:'英語服務' },
+    { name:'佳芳有機茶園',              type:'茶葉農場', icon:'🍵', eng:'英語導覽' },
+    { name:'美濃冰品',                  type:'冰品',    icon:'🧊', eng:'基礎英語' },
+    { name:'寒舍山莊茶坊',              type:'茶坊',    icon:'🏡', eng:'英語服務' },
+  ]},
+  '綠島鄉': { stores: [
+    { name:'綠島派吃所',                  type:'餐廳',   icon:'🍽️', eng:'英語菜單' },
+    { name:'臺東縣自然與人文學會（綠島厝）',type:'文化學會',icon:'🏛️',eng:'英語導覽' },
+    { name:'珊納賽飲冰室早點屋',          type:'早餐',   icon:'🍳', eng:'基礎英語' },
+    { name:'綠島海韻潛水民宿',            type:'潛水民宿',icon:'🤿', eng:'英語服務' },
+  ]},
+  '成功鎮': { stores: [
+    { name:'幸福綠豆湯',        type:'甜品',   icon:'🍲', eng:'基礎英語' },
+    { name:'浮定咖啡戶外休閒企業社',type:'咖啡戶外',icon:'⛺',eng:'英語服務' },
+    { name:'東粄香傳統米食館',   type:'傳統米食',icon:'🍚',eng:'英語菜單' },
+  ]},
+  '延平鄉': { stores: [
+    { name:'烏尼囊多元文化工作坊',    type:'文化工坊', icon:'🎭', eng:'英語導覽' },
+    { name:'阿布斯布農傳統服飾工作室',type:'傳統工藝', icon:'👘', eng:'英語導覽' },
+    { name:'卡那歲工作坊',            type:'工藝',    icon:'🧵', eng:'基礎英語' },
+  ]},
+  '太麻里鄉': { stores: [
+    { name:'力卡珈啡屋',    type:'咖啡', icon:'☕', eng:'英語菜單' },
+    { name:'向陽薪傳木工坊',type:'木藝', icon:'🪵', eng:'英語導覽' },
+    { name:'撒花咖啡工作室',type:'咖啡', icon:'☕', eng:'英語服務' },
+  ]},
+  '金峰鄉': { stores: [
+    { name:'麻茶屋民宿',    type:'民宿',     icon:'🏠', eng:'英語服務' },
+    { name:'少妮媱烘焙',    type:'烘焙',     icon:'🥐', eng:'基礎英語' },
+    { name:'英惠原藝工作坊',type:'原住民工藝',icon:'🖼️',eng:'英語導覽' },
+  ]},
+  '大武鄉': { stores: [
+    { name:'達興山號',    type:'商店', icon:'🏪', eng:'基礎英語' },
+    { name:'笆札筏布工坊',type:'工藝', icon:'🧺', eng:'英語導覽' },
+  ]},
+  '長濱鄉': { stores: [
+    { name:'藏濱水產',    type:'海鮮', icon:'🦞', eng:'基礎英語' },
+    { name:'鳳奶客棧民宿',type:'民宿', icon:'🏠', eng:'英語服務' },
+  ]},
+  '蘭嶼鄉': { stores: [
+    { name:'蘭嶼美佳欣民宿',type:'民宿', icon:'🏠', eng:'英語服務' },
+    { name:'小豆丁民宿',    type:'民宿', icon:'🏠', eng:'英語服務' },
+  ]},
+  '鹿野鄉': { stores: [
+    { name:'新元昌紅茶產業文化館',type:'茶文化館',icon:'🍵',eng:'英語導覽' },
+  ]},
+  '達仁鄉': { stores: [
+    { name:'土坂金宿',type:'民宿',icon:'🏠',eng:'英語服務' },
+  ]},
+};
+
+const idMap = {
+  '長濱鄉':'changbin','池上鄉':'chishang','東河鄉':'donghe','卑南鄉':'beinan',
+  '綠島鄉':'lyudao','成功鎮':'chenggong','延平鄉':'yanping','太麻里鄉':'taimali',
+  '金峰鄉':'jinfeng','大武鄉':'dawu','臺東市':'taitung','蘭嶼鄉':'lanyu',
+  '鹿野鄉':'luye','達仁鄉':'daren',
+};
+
+let currentTownship = null;
+
+function selectTownship(name) {
+  currentTownship = name;
+  document.querySelectorAll('.township').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('tw-' + idMap[name]);
+  if (el) el.classList.add('active');
+
+  const data = storeData[name];
+  document.getElementById('township-name-title').textContent = name;
+  document.getElementById('township-store-count').textContent =
+    '共 ' + data.stores.length + ' 間英語友善店家';
+
+  const list = document.getElementById('store-list');
+  list.innerHTML = '';
+  data.stores.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'store-card';
+    card.onclick = () => selectStore(name, i);
+    card.innerHTML =
+      '<div class="store-icon-wrap">' + s.icon + '</div>' +
+      '<div class="store-card-info">' +
+        '<div class="store-card-name">' + s.name + '</div>' +
+        '<span class="store-type-tag">' + s.type + '</span>' +
+      '</div>' +
+      '<div class="store-card-arrow">›</div>';
+    list.appendChild(card);
+  });
+
+  document.getElementById('welcome-msg').style.display = 'none';
+  document.getElementById('store-detail').classList.remove('visible');
+  document.getElementById('map-panel').classList.remove('hidden');
+  document.getElementById('township-header').classList.add('visible');
+  document.getElementById('store-list').classList.add('visible');
+}
+
+function selectStore(township, idx) {
+  const s = storeData[township].stores[idx];
+  document.getElementById('detail-emoji').textContent = s.icon;
+  document.getElementById('detail-name').textContent = s.name;
+  document.getElementById('detail-loc').textContent = '📍 ' + township;
+
+  document.getElementById('detail-body').innerHTML =
+    row('英語服務', '<span class="english-badge">🌐 ' + s.eng + '</span>') +
+    row('店家類型', s.type) +
+    row('所在鄉鎮', township) +
+    row('地址', '<span class="dim">（資料建置中）</span>') +
+    row('電話', '<span class="dim">（資料建置中）</span>') +
+    row('營業時間', '<span class="dim">（資料建置中）</span>') +
+    row('店家介紹', '<span class="dim">（資料建置中）</span>');
+
+  document.getElementById('map-panel').classList.add('hidden');
+  document.getElementById('township-header').classList.remove('visible');
+  document.getElementById('store-list').classList.remove('visible');
+  document.getElementById('store-detail').classList.add('visible');
+}
+
+function row(label, value) {
+  return '<div class="info-row">' +
+    '<div class="info-label">' + label + '</div>' +
+    '<div class="info-value">' + value + '</div>' +
+  '</div>';
+}
+
+function backToList() {
+  document.getElementById('map-panel').classList.remove('hidden');
+  document.getElementById('store-detail').classList.remove('visible');
+  document.getElementById('township-header').classList.add('visible');
+  document.getElementById('store-list').classList.add('visible');
+}
+
+function backToMap() {
+  document.getElementById('township-header').classList.remove('visible');
+  document.getElementById('store-list').classList.remove('visible');
+  document.getElementById('welcome-msg').style.display = '';
+  document.querySelectorAll('.township').forEach(el => el.classList.remove('active'));
+  currentTownship = null;
+}
+</script>
+</body>
+</html>
