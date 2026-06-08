@@ -17,7 +17,7 @@
 }
 
 #map-panel {
-  width: 44%;
+  width: 50%;
   flex-shrink: 0;
   height: 100%;
   display: flex;
@@ -218,7 +218,7 @@
       <!-- 池上鄉 -->
       <g class="township" id="tw-chishang" onclick="selectTownship('池上鄉')">
         <path d="M 179.4,192.4 L 194.2,154.5 L 188.7,146.8 L 183.9,147.2 L 181.3,142.6 L 173.3,140.7 L 167.8,133.8 L 167.4,137.3 L 164.3,135.5 L 160.9,139.1 L 165.9,143.7 L 161.7,150.0 L 166.0,155.1 L 170.8,174.1 L 163.2,188.7 L 165.1,191.7 L 178.0,192.2 Z"/>
-        <text x="174.7" y="162.4">池上鄉</text>
+        <text x="183.0" y="170.0">池上鄉</text>
       </g>
 
       <!-- 關山鎮（無資料，灰色顯示） -->
@@ -456,6 +456,12 @@ const storeData = {
   ]},
 };
 
+// ── Google Sheets 動態資料設定 ──────────────────────────────
+// 1. 開啟 Google Sheet → 檔案 → 分享 → 發佈到網路 → 選 CSV → 複製網址
+// 2. 將網址貼到下方 SHEET_CSV_URL（留空則使用內建靜態資料）
+const SHEET_CSV_URL = '';
+// ────────────────────────────────────────────────────────────
+
 const idMap = {
   '長濱鄉':'changbin','池上鄉':'chishang','東河鄉':'donghe','卑南鄉':'beinan',
   '綠島鄉':'lyudao','成功鎮':'chenggong','延平鄉':'yanping','太麻里鄉':'taimali',
@@ -505,14 +511,15 @@ function selectStore(township, idx) {
   document.getElementById('detail-name').textContent = s.name;
   document.getElementById('detail-loc').textContent = '📍 ' + township;
 
+  const na = '<span class="dim">（資料建置中）</span>';
   document.getElementById('detail-body').innerHTML =
     row('英語服務', '<span class="english-badge">🌐 ' + s.eng + '</span>') +
     row('店家類型', s.type) +
     row('所在鄉鎮', township) +
-    row('地址', '<span class="dim">（資料建置中）</span>') +
-    row('電話', '<span class="dim">（資料建置中）</span>') +
-    row('營業時間', '<span class="dim">（資料建置中）</span>') +
-    row('店家介紹', '<span class="dim">（資料建置中）</span>');
+    row('地址', s.addr  || na) +
+    row('電話', s.tel   || na) +
+    row('營業時間', s.hours || na) +
+    row('店家介紹', s.desc  || na);
 
   document.getElementById('map-panel').classList.add('hidden');
   document.getElementById('township-header').classList.remove('visible');
@@ -539,6 +546,58 @@ function backToMap() {
   document.querySelectorAll('.township').forEach(el => el.classList.remove('active'));
   currentTownship = null;
 }
+
+// ── Google Sheets CSV 載入 ───────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map(line => {
+    // 支援欄位內含逗號（用引號包圍）
+    const cols = [];
+    let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    cols.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = (cols[i] || '').replace(/^"|"$/g, ''); });
+    return obj;
+  });
+}
+
+async function loadFromSheet() {
+  if (!SHEET_CSV_URL) return;
+  try {
+    const res = await fetch(SHEET_CSV_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = parseCSV(await res.text());
+    // 重建 storeData（保留鄉鎮結構，以 Google Sheet 為主）
+    rows.forEach(r => {
+      const t = r['鄉鎮'] || r['township'];
+      if (!t) return;
+      if (!storeData[t]) storeData[t] = { stores: [] };
+      storeData[t].stores.push({
+        name:  r['店家名稱'] || r['name'] || '',
+        type:  r['類型']   || r['type'] || '',
+        icon:  r['圖示']   || r['icon'] || '🏪',
+        eng:   r['英語程度'] || r['eng'] || '',
+        addr:  r['地址']   || r['address'] || '',
+        tel:   r['電話']   || r['phone'] || '',
+        hours: r['營業時間'] || r['hours'] || '',
+        desc:  r['店家介紹'] || r['description'] || '',
+      });
+    });
+    console.log('[Sheet] 載入', rows.length, '筆店家資料');
+  } catch (e) {
+    console.warn('[Sheet] 載入失敗，使用內建資料：', e);
+  }
+}
+
+loadFromSheet();
+// ────────────────────────────────────────────────────────────
 </script>
 </body>
 </html>
