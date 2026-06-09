@@ -574,23 +574,40 @@ async function loadFromSheet() {
     const res = await fetch(SHEET_CSV_URL);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const rows = parseCSV(await res.text());
-    // 重建 storeData（保留鄉鎮結構，以 Google Sheet 為主）
-    rows.forEach(r => {
-      const t = r['鄉鎮'] || r['township'];
-      if (!t) return;
+
+    // 過濾掉鄉鎮或店家名稱為空的列
+    const valid = rows.filter(r => {
+      const t    = (r['鄉鎮']   || r['township'] || '').trim();
+      const name = (r['店家名稱'] || r['name']     || '').trim();
+      return t && name;
+    });
+    if (valid.length === 0) return; // Sheet 無有效資料，保留靜態
+
+    // 完全以 Sheet 取代靜態資料（避免重複計算）
+    Object.keys(storeData).forEach(k => delete storeData[k]);
+    valid.forEach(r => {
+      const t = (r['鄉鎮'] || r['township']).trim();
       if (!storeData[t]) storeData[t] = { stores: [] };
       storeData[t].stores.push({
-        name:  r['店家名稱'] || r['name'] || '',
-        type:  r['類型']   || r['type'] || '',
-        icon:  r['圖示']   || r['icon'] || '🏪',
-        eng:   r['英語程度'] || r['eng'] || '',
-        addr:  r['地址']   || r['address'] || '',
-        tel:   r['電話']   || r['phone'] || '',
-        hours: r['營業時間'] || r['hours'] || '',
-        desc:  r['店家介紹'] || r['description'] || '',
+        name:  (r['店家名稱'] || r['name']     || '').trim(),
+        type:  (r['類型']   || r['type']     || '').trim(),
+        icon:  (r['圖示']   || r['icon']     || '🏪').trim(),
+        eng:   (r['英語程度'] || r['eng']      || '').trim(),
+        addr:  (r['地址']   || r['address']  || '').trim(),
+        tel:   (r['電話']   || r['phone']    || '').trim(),
+        hours: (r['營業時間'] || r['hours']    || '').trim(),
+        desc:  (r['店家介紹'] || r['description'] || '').trim(),
       });
     });
-    console.log('[Sheet] 載入', rows.length, '筆店家資料');
+
+    // 動態更新歡迎畫面統計數字
+    const totalStores    = Object.values(storeData).reduce((s, v) => s + v.stores.length, 0);
+    const totalTownships = Object.keys(storeData).length;
+    const nums = document.querySelectorAll('.stat-num');
+    if (nums[0]) nums[0].textContent = totalStores;
+    if (nums[1]) nums[1].textContent = totalTownships;
+
+    console.log('[Sheet] 載入', valid.length, '筆，', totalTownships, '個鄉鎮');
   } catch (e) {
     console.warn('[Sheet] 載入失敗，使用內建資料：', e);
   }
