@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>臺東縣英語店家地圖</title>
+<title>雙語A通地圖</title>
 <style>
 #app * { box-sizing: border-box; }
 
@@ -190,7 +190,7 @@
 <div id="app">
 
   <div id="map-panel">
-    <div id="map-title">臺東縣英語店家地圖</div>
+    <div id="map-title">雙語A通地圖</div>
     <div id="map-hint">滑鼠移至鄉鎮 → 點擊查看店家</div>
 
     <!-- SVG 地圖：座標來自政府開放資料 GeoJSON 轉換 -->
@@ -325,7 +325,7 @@
   <div id="right-panel">
 
     <div id="welcome-msg">
-      <h2>臺東縣英語店家地圖</h2>
+      <h2>雙語A通地圖</h2>
       <p>點擊左側地圖的各鄉鎮<br>查看當地英語友善店家</p>
       <div class="stats">
         <div class="stat-box">
@@ -549,23 +549,53 @@ function backToMap() {
 
 // ── Google Sheets CSV 載入 ───────────────────────────────────
 function parseCSV(text) {
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-  return lines.slice(1).map(line => {
-    // 支援欄位內含逗號（用引號包圍）
-    const cols = [];
-    let cur = '', inQ = false;
-    for (const ch of line) {
-      if (ch === '"') { inQ = !inQ; }
-      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
-      else { cur += ch; }
+  const rows = [];
+  let row = [];
+  let cur = '';
+  let inQ = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (ch === '"') {
+      if (inQ && next === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQ = !inQ;
+      }
+    } else if (ch === ',' && !inQ) {
+      row.push(cur);
+      cur = '';
+    } else if ((ch === '\n' || ch === '\r') && !inQ) {
+      if (ch === '\r' && next === '\n') i++;
+      row.push(cur);
+      if (row.some(v => v.trim() !== '')) rows.push(row);
+      row = [];
+      cur = '';
+    } else {
+      cur += ch;
     }
-    cols.push(cur.trim());
+  }
+
+  row.push(cur);
+  if (row.some(v => v.trim() !== '')) rows.push(row);
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map(h => h.trim().replace(/^\uFEFF/, ''));
+  return rows.slice(1).map(cols => {
     const obj = {};
-    headers.forEach((h, i) => { obj[h] = (cols[i] || '').replace(/^"|"$/g, ''); });
+    headers.forEach((h, i) => { obj[h] = (cols[i] || '').trim(); });
     return obj;
   });
+}
+
+function cleanPhone(value) {
+  return (value || '')
+    .replace(/^[\s'`‘’]+/, '')
+    .replace(/,/g, '')
+    .trim();
 }
 
 async function loadFromSheet() {
@@ -575,11 +605,13 @@ async function loadFromSheet() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const rows = parseCSV(await res.text());
 
-    // 過濾掉鄉鎮或店家名稱為空的列
+    const allowedTownships = new Set(Object.keys(idMap));
+
+    // 過濾掉鄉鎮或店家名稱為空的列，也避免多行欄位被誤判成假鄉鎮
     const valid = rows.filter(r => {
       const t    = (r['鄉鎮']   || r['township'] || '').trim();
       const name = (r['店家名稱'] || r['name']     || '').trim();
-      return t && name;
+      return allowedTownships.has(t) && name;
     });
     if (valid.length === 0) return; // Sheet 無有效資料，保留靜態
 
@@ -594,7 +626,7 @@ async function loadFromSheet() {
         icon:  (r['圖示']   || r['icon']     || '🏪').trim(),
         eng:   (r['英語程度'] || r['eng']      || '').trim(),
         addr:  (r['地址']   || r['address']  || '').trim(),
-        tel:   (r['電話']   || r['phone']    || '').trim(),
+        tel:   cleanPhone(r['電話'] || r['phone']),
         hours: (r['營業時間'] || r['hours']    || '').trim(),
         desc:  (r['店家介紹'] || r['description'] || '').trim(),
       });
